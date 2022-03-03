@@ -1,5 +1,6 @@
 import requests, bs4, webbrowser, os, time, string, unicodedata, sqlite3, threading
 from sqlite3 import Error
+from SQLiteToEpub import *
 
 def parseRR(url):
     if(url == ''):
@@ -9,6 +10,7 @@ def parseRR(url):
     soup = bs4.BeautifulSoup(res.text, "html.parser")
     urlArray = url.split('/')
     name = urlArray[-1].replace('-',' ').title()
+    db_path = ".\\"+name+"\\wordcount.db"
     #print(name)
 
     #bookHTML = ""
@@ -49,15 +51,26 @@ def parseRR(url):
 
     res = session.get(curUrl)
     soup = bs4.BeautifulSoup(res.text, "html.parser")
+    nextButton = soup.select('div .nav-buttons div')[1]
+    try:
+        nextURL = 'https://www.royalroad.com' + nextButton.select('a')[0]['href']
+        curUrl = nextURL
+        tempRes = session.get(nextURL)
+        soup = bs4.BeautifulSoup(tempRes.text, "html.parser")
+    except:
+        finalPage = True
+        print("Up to date on "+name+"!")
+        return
     
 
     while (not finalPage):
         chapter=soup.select('.chapter-content')[0]
         #bookHTML += chapter
 
-        chapterString=chapter.getText()
+        #chapterString=chapter.getText()
+        chapterString=str(chapter)
         chapterTitle = soup.select('h1')[0].getText()
-        wordcountString = chapterString.split()
+        wordcountString = chapter.getText().split()
         chapterWordcount = len(wordcountString)
         datePosted = soup.find('time').attrs['datetime']
 
@@ -84,8 +97,9 @@ def parseRR(url):
     db.execute("Select sum(wordcount), count(wordcount), avg(wordcount), min(wordcount), max(wordcount) from chapters")
     row = db.fetchall()[0]
     #print(row)
-    print(name+':\nTotal wordcount: '+str(row[0])+'.    Chapters: '+str(row[1])+'.    Average Words Per Chapter: '+str(row[2])+'.    Minimum Wordcount: '+str(row[3])+'.    Maximum Wordcount: '+str(row[4]))
+    print(name+':\nTotal wordcount: '+str(row[0])+'.    Chapters: '+str(row[1])+'.    Average Words Per Chapter: '+str(row[2])+'.    Minimum Wordcount: '+str(row[3])+'.    Maximum Wordcount: '+str(row[4])+'\n')
     conn.close()
+    parseSQLite(db_path,name)
 
 
 
