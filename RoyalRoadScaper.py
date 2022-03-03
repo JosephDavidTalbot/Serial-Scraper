@@ -11,9 +11,8 @@ def parseRR(url):
     urlArray = url.split('/')
     name = urlArray[-1].replace('-',' ').title()
     db_path = ".\\"+name+"\\wordcount.db"
-    #print(name)
 
-    #bookHTML = ""
+    base_url = 'https://'+urlArray[2]
     
     conn = None
 
@@ -39,7 +38,7 @@ def parseRR(url):
     idCounter = 0 #Chapter ID is zero-indexed and represents order of posting.
     finalPage = False
 
-    curUrl = 'https://www.royalroad.com' + soup.select('td a')[0]['href']
+    curUrl = base_url + soup.select('td a')[0]['href']
     #print(curUrl)
     db.execute("select count(*) from chapters")
     is_empty = db.fetchall()[0][0]
@@ -52,16 +51,22 @@ def parseRR(url):
     res = session.get(curUrl)
     soup = bs4.BeautifulSoup(res.text, "html.parser")
     nextButton = soup.select('div .nav-buttons div')[1]
-    try:
-        nextURL = 'https://www.royalroad.com' + nextButton.select('a')[0]['href']
-        curUrl = nextURL
-        tempRes = session.get(nextURL)
-        soup = bs4.BeautifulSoup(tempRes.text, "html.parser")
-    except:
-        finalPage = True
-        print("Up to date on "+name+"!")
-        return
-    
+    if(is_empty > 0):
+        try:
+            nextURL = base_url + nextButton.select('a')[0]['href']
+            curUrl = nextURL
+            tempRes = session.get(nextURL)
+            soup = bs4.BeautifulSoup(tempRes.text, "html.parser")
+        except:
+            finalPage = True
+            print("Up to date on "+name+"!")
+            db.execute("Select sum(wordcount), count(wordcount), avg(wordcount), min(wordcount), max(wordcount) from chapters")
+            row = db.fetchall()[0]
+            #print(row)
+            print('Total wordcount: '+str(row[0])+'.    Chapters: '+str(row[1])+'.    Average Words Per Chapter: '+str(row[2])+'.    Minimum Wordcount: '+str(row[3])+'.    Maximum Wordcount: '+str(row[4])+'\n')
+            conn.close()
+            return
+    #print(curUrl)
 
     while (not finalPage):
         chapter=soup.select('.chapter-content')[0]
@@ -73,18 +78,20 @@ def parseRR(url):
         wordcountString = chapter.getText().split()
         chapterWordcount = len(wordcountString)
         datePosted = soup.find('time').attrs['datetime']
-
+        sanitizedUrl = '/'.join(curUrl.split('/')[-9:])
         #print(chapterTitle + '. Date Posted: '+ datePosted+'. Wordcount: ' + str(chapterWordcount))
-        blob = (str(idCounter),chapterTitle,curUrl,chapterString,str(chapterWordcount),datePosted)
+        blob = (str(idCounter),chapterTitle,sanitizedUrl,chapterString,str(chapterWordcount),datePosted)
         db.execute("INSERT OR IGNORE INTO chapters(id, title, url, content, wordcount, datePosted) values (?,?,?,?,?,?);", blob)
         idCounter += 1
-
+        #if(idCounter == 38):
+            #break
         nextButton = soup.select('div .nav-buttons div')[1]
         #print(nextButton)
         #if('button' in nextButton):
         #if(curUrl == nextURL):
+
         try:
-            nextURL = 'https://www.royalroad.com' + nextButton.select('a')[0]['href']
+            nextURL = base_url + nextButton.select('a')[0]['href']
             curUrl = nextURL
             tempRes = session.get(nextURL)
             soup = bs4.BeautifulSoup(tempRes.text, "html.parser")
@@ -106,17 +113,16 @@ def parseRR(url):
 
 
 #Main
-
-configFile = open(".\\config.txt", 'a', encoding='utf-8')
-configFile.close()
-configFile = open(".\\config.txt", 'r', encoding='utf-8')
-config = configFile.read()
-configFile.close()
-configFile = open(".\\config.txt", 'a', encoding='utf-8')
-
 entering = True
+configFile = open(".\\config.txt", 'a', encoding='utf-8')
+configFile.close()
+print('Welcome to the Royal Road scraper! Make sure you input the index page of the story you want to scrape and compile.')
 
 while(entering):
+    configFile = open(".\\config.txt", 'r', encoding='utf-8')
+    config = configFile.read()
+    configFile.close()
+    configFile = open(".\\config.txt", 'a', encoding='utf-8')
     print(config)
     print('Input the URL of the story to be scraped:')
     url = input()
